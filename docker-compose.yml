@@ -1,0 +1,88 @@
+# Core stack: app + Postgres(pgvector) + Ollama + MCP server.
+# Run: docker compose up --build
+# Add LiteLLM: docker compose --profile gateway up --build
+# Add Langfuse: docker compose --profile observability up --build
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/incident_copilot
+      OLLAMA_HOST: http://ollama:11434
+      OTEL_ENABLED: "false"
+      LITELLM_ENABLED: "false"
+      LITELLM_BASE_URL: http://litellm:4000
+      LANGFUSE_ENABLED: "false"
+      ENVIRONMENT: docker-compose
+      API_KEY: dev-local-key
+      MCP_ENABLED: "true"
+      MCP_SERVER_URL: http://mcp-server:8100/mcp
+    depends_on:
+      db:
+        condition: service_healthy
+      mcp-server:
+        condition: service_started
+    networks: [incident_net]
+
+  mcp-server:
+    build: .
+    command: ["python", "-m", "app.mcp_server"]
+    ports:
+      - "8100:8100"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/incident_copilot
+      MCP_ALLOWED_HOST: "mcp-server:8100"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [incident_net]
+
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: incident_copilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d incident_copilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks: [incident_net]
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks: [incident_net]
+
+  litellm:
+    # Built from a derived Dockerfile, not the bare image directly -- the
+    # official image ships cryptography==50.0.0, which SIGILLs on this
+    # project's ARM64 Docker environment (same root cause hit twice before,
+    # in app/mcp_server.py's deps and Langfuse's). See litellm.Dockerfile.
+    build:
+      context: .
+      dockerfile: observability/litellm.Dockerfile
+    profiles: ["gateway"]
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./observability/litellm-config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    depends_on: [ollama]
+    networks: [incident_net]
+
+volumes:
+  pgdata:
+  ollama_data:
+
+networks:
+  incident_net:
