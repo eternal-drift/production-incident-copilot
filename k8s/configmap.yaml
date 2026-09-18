@@ -1,0 +1,22 @@
+# Fixed per docs/threat-model.md Finding #3: DATABASE_URL used to embed the
+# DB password in plaintext here, which made k8s/secret.yaml's Secret
+# provide no real protection (the same password had to be duplicated in
+# this non-RBAC-restricted ConfigMap for the app to connect at all).
+# POSTGRES_PASSWORD now comes from the Secret at runtime instead --
+# app/config.py assembles DATABASE_URL from POSTGRES_HOST/USER/PASSWORD/DB
+# when POSTGRES_PASSWORD is set (see its _assemble_database_url validator).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: incident-copilot-config
+  namespace: incident-copilot
+data:
+  ENVIRONMENT: "kubernetes"
+  OTEL_ENABLED: "false"
+  LITELLM_ENABLED: "false"
+  LANGFUSE_ENABLED: "false"
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: "postgres"
+  POSTGRES_DB: "incident_copilot"
+  OLLAMA_HOST: "http://ollama:11434"

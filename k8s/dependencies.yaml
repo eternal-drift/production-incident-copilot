@@ -1,0 +1,31 @@
+# Minimal in-cluster Postgres+pgvector for the local demo — see ADR 0001
+# for why one Postgres instance instead of a separate vector DB.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: incident-copilot
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: postgres } }
+  template:
+    metadata: { labels: { app: postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg16
+          env:
+            - { name: POSTGRES_USER, value: postgres }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: incident-copilot-secrets, key: POSTGRES_PASSWORD } }
+            - { name: POSTGRES_DB, value: incident_copilot }
+          ports: [{ containerPort: 5432 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: incident-copilot
+spec:
+  selector: { app: postgres }
+  ports: [{ port: 5432 }]
