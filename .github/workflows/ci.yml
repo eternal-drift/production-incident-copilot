@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: incident_copilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/incident_copilot
+      API_KEY: dev-local-key
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.9.4"
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync
+
+      # Real models, not the hashing-embedding fallback -- this project's
+      # own history (session 1/2 notes) found that evals against the
+      # fallback pass/fail differently than against real embeddings, so a
+      # green CI run against the fallback would be a false signal.
+      - name: Pull Ollama models
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:11434/ > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:11434/api/pull -d '{"name":"nomic-embed-text"}'
+          curl -sf http://127.0.0.1:11434/api/pull -d '{"name":"qwen2.5:7b"}'
+
+      - name: Run unit tests
+        run: uv run pytest tests/ -v
+
+      # CI runs the app as a plain process (uv run uvicorn), not the
+      # Docker image that bakes this model in at build time -- pre-warm
+      # the cache here so the eval harness's first /chat call doesn't
+      # trigger an uncached download mid-request.
+      - name: Pre-download reranker model
+        run: uv run python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L6-v2', revision='233902d25c440f23af6f7d6e94d2946bac0bee0a')"
+
+      - name: Boot app
+        # Same offline posture as the Docker image (ADR 0003) -- if the
+        # pre-download step above didn't actually cache the reranker
+        # model, this makes the app fail loudly instead of silently
+        # falling back to a live download that would mask the bug.
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+        run: |
+          uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/healthz > /dev/null; then
+              echo "app is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "app failed to become healthy" >&2
+          exit 1
+
+      - name: Run eval harness
+        # --timeout well above the local default: this runner has no GPU,
+        # so qwen2.5:7b CPU inference is much slower than local dev.
+        run: uv run python evals/run_evals.py --url http://127.0.0.1:8000 --api-key dev-local-key --timeout 300
