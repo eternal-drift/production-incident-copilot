@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+.DS_Store
+*.pyc
+.pytest_cache/
+.env
+uvicorn*.log
+*.tfstate
+*.tfstate.backup
+tfplan
+.terraform/
+k8s/secret.yaml
+
+# Local working docs -- session logs and raw command/debugging history.
+# Useful during development, not meant to ship in the repo (contains
+# real AWS account IDs and other local-environment specifics).
+/personal-use/
+
+# Local Claude Code tooling config -- environment-specific (absolute
+# paths, etc.), not part of the shipped project.
+/.claude/

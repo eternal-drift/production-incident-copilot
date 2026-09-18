@@ -1,0 +1,54 @@
+[project]
+name = "incident-copilot"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "asyncpg>=0.31.0",
+    "cryptography==43.0.3",
+    "fastapi>=0.141.1",
+    "greenlet>=3.5.5",
+    "httpx>=0.28.1",
+    "langfuse==2.60.10",
+    "langgraph>=1.2.11",
+    "litellm>=1.97.0",
+    "mcp[cli]>=2.0.0",
+    "numpy>=2.5.2",
+    "ollama>=0.6.2",
+    "opentelemetry-api>=1.44.0",
+    "opentelemetry-exporter-otlp>=1.44.0",
+    "opentelemetry-instrumentation-fastapi>=0.65b0",
+    "opentelemetry-sdk>=1.44.0",
+    "pgvector>=0.5.0",
+    "prometheus-fastapi-instrumentator>=8.1.0",
+    "psycopg2-binary>=2.9.12",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.15.0",
+    "python-dotenv>=1.2.3",
+    "sentence-transformers>=6.0.0",
+    "slowapi>=0.1.10",
+    "sqlalchemy>=2.0.52",
+    "torch>=2.2",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+# CPU-only PyTorch (ADR 0003). PyPI's default Linux `torch` wheel pulls in
+# ~3.5GB of CUDA/triton packages that are pure dead weight here -- this
+# container never has a GPU. Real finding: the first build without this
+# override produced a 5.75GB image; `du` inside the container showed
+# 2.9GB in `nvidia/` alone plus 652MB in `triton/`. Scoping torch to
+# PyTorch's own CPU wheel index removes all of it.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
