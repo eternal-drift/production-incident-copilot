@@ -1,0 +1,64 @@
+# Adds Prometheus + Tempo + Grafana (system observability) and
+# self-hosted Langfuse (LLM/agent observability). Run combined:
+#   docker compose -f docker-compose.yml -f observability/docker-compose.otel.yml \
+#     --profile observability up --build
+services:
+  app:
+    environment:
+      OTEL_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      LANGFUSE_ENABLED: "true"
+      LANGFUSE_HOST: http://langfuse:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["observability"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["9090:9090"]
+    networks: [incident_net]
+
+  tempo:
+    image: grafana/tempo:latest
+    profiles: ["observability"]
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+    ports: ["3200:3200", "4317:4317"]
+    networks: [incident_net]
+
+  grafana:
+    image: grafana/grafana:latest
+    profiles: ["observability"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ./observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./observability/grafana-dashboards-provider.yml:/etc/grafana/provisioning/dashboards/provider.yml:ro
+      - ./observability/dashboards:/etc/grafana/provisioning/dashboards/json:ro
+    ports: ["3000:3000"]
+    networks: [incident_net]
+
+  langfuse:
+    # Pinned to v2 -- real bug found running this for real: `:latest` now
+    # resolves to Langfuse v3, which requires ClickHouse + Redis, a much
+    # heavier architecture than this config (Postgres-only) was written
+    # for. v2 matches what's actually configured below.
+    image: langfuse/langfuse:2
+    profiles: ["observability"]
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/langfuse
+      NEXTAUTH_SECRET: local-dev-secret-change-me
+      NEXTAUTH_URL: http://localhost:3001
+      SALT: local-dev-salt-change-me
+      TELEMETRY_ENABLED: "false"
+    ports:
+      - "3001:3000"
+    depends_on: [db]
+    networks: [incident_net]
+
+networks:
+  incident_net:

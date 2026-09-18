@@ -1,0 +1,96 @@
+{
+  "uid": "incident-copilot",
+  "title": "Incident Copilot",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "/chat latency (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "drawStyle": "line", "lineWidth": 2 } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(http_request_duration_wide_seconds_bucket{handler=\"/chat\"}[15m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_wide_seconds_bucket{handler=\"/chat\"}[15m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Citation coverage (DOCUMENT responses with a valid citation)",
+      "type": "stat",
+      "gridPos": { "h": 9, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100 },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(incident_copilot_document_responses_total{has_citation=\"true\"}) / sum(incident_copilot_document_responses_total)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Total DOCUMENT-routed responses",
+      "type": "stat",
+      "gridPos": { "h": 9, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(incident_copilot_document_responses_total)", "refId": "A" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Chat outcomes by failure category",
+      "type": "barchart",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "sum by (reason) (incident_copilot_chat_outcomes_total)",
+          "legendFormat": "{{reason}}",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Requests by route and status",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "lineWidth": 2 } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (handler, status) (rate(http_requests_total[15m]))",
+          "legendFormat": "{{handler}} ({{status}})",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

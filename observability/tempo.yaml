@@ -1,0 +1,20 @@
+server:
+  http_listen_port: 3200
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal
+# Removed a `compactor.compaction.block_retention` block that was here --
+# real bug found running this for real: `grafana/tempo:latest`'s current
+# schema doesn't have that field, `field compactor not found in type
+# app.Config` on startup. Retention defaults are fine for local/demo use;
+# not worth chasing the exact current schema for this project's scope.
